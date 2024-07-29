@@ -4,13 +4,16 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from utils.connection_manager import ConnectionManager
 from utils.base_handler import BaseHandler
 from utils.handlers.generic_handler import GenericHandler
-from utils.handlers.openai_chat_handler import OpenAIChatHandler
+from utils.handlers.openai_chat_handler import OpenAIChatHandler, OpenAIChatMemoryHandler
+from utils.weaviate_connection_manager import WeaviateConnectionManager
 
 app = FastAPI()
 
-manager: ConnectionManager = ConnectionManager()
-handlers: Dict[str, BaseHandler] = {'generic': GenericHandler(manager),
-                                    'openai_chat': OpenAIChatHandler(manager)}
+ws_connection_manager: ConnectionManager = ConnectionManager()
+weaviate_connection_manager = WeaviateConnectionManager()
+handlers: Dict[str, BaseHandler] = {'generic': GenericHandler(ws_connection_manager),
+                                    'openai_chat': OpenAIChatHandler(ws_connection_manager),
+                                    'openai_chat_mem': OpenAIChatMemoryHandler(ws_connection_manager, weaviate_connection_manager)}
 
 
 @app.get("/")
@@ -20,7 +23,7 @@ async def root():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
+    await ws_connection_manager.connect(websocket)
     try:
         while True:
             json_data: Dict[str, Any] = await websocket.receive_json()
@@ -30,7 +33,7 @@ async def websocket_endpoint(websocket: WebSocket):
             except KeyError:
                 pass
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        ws_connection_manager.disconnect(websocket)
 
 
 def get_handler(json_data: Dict[str, Any]) -> BaseHandler:

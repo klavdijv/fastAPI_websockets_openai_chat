@@ -18,6 +18,7 @@ class OpenAIChatHandler(BaseHandler):
         self.open_ai = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
 
     def process_json(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
+        messages: Dict[str, str] = json_data['messages']
         stream = self.open_ai.chat.completions.create(
             model=self.OPENAI_MODEL,
             messages=messages,
@@ -37,16 +38,22 @@ class OpenAIChatMemoryHandler(OpenAIChatHandler):
         self.weaviate_manager: WeaviateConnectionManager = weaviate_manager
 
     def process_json(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
-        character_name: str = json_data['character_name']
+        character_name: str = self._escape_name(json_data['character_name'])
         messages: Dict[str, str] = json_data['messages']
         collection: WeaviateCollection = self.weaviate_manager.get_collection(f'chat_hist_{character_name}')
         context_messages: List(Dict[str, str]) = collection.get_messages(query=messages[-1]['content'])
-        json_data['messages'] = messages[0] + context_messages + messages[1:]
+        json_data['messages'] = [messages[0]] + context_messages + messages[1:]
         response: str = ''
 
         for message in super().process_json(json_data):
             yield message
             response += message['message']
 
-        save_messages: List[Dict[str, str]] = messages[1:] + [{'role': 'assistant', 'content': response}]
-        collection.save(save_messages)
+        messages_to_save: List[Dict[str, str]] = messages[1:] + [{'role': 'assistant', 'content': response}]
+        collection.save(messages_to_save)
+
+    def _escape_name(self, name: str) -> str:
+        name = name.strip()
+        name = name.replace(',', '')
+        name = name.replace(' ', '_')
+        return name
