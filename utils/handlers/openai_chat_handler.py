@@ -70,7 +70,7 @@ class OpenAIChatHandler(BaseHandler):
     def process_json(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
         processor: ChunkProcessor = ChunkProcessor()
         messages: Dict[str, str] = json_data['messages']
-        tools: List = json_data.get('tools', [])
+        tools: List = json_data.get('tools')
 
         stream = self.open_ai.chat.completions.create(
             model=self.OPENAI_MODEL,
@@ -82,6 +82,7 @@ class OpenAIChatHandler(BaseHandler):
             result: Dict[str, Any]|None = processor.process_chunk(chunk)
             if result is not None:
                 yield result
+        yield {'finished': True}
         #     message: str|None = chunk.choices[0].delta.content
         #     print(message)
         #     if message is not None:
@@ -109,7 +110,6 @@ class OpenAIChatHandler(BaseHandler):
             else:
                 args.append(arguments)
         return list(zip(funcs, args))
-
 
 class OpenAIChatMemoryHandler(OpenAIChatHandler):
     def __init__(self, connection_manager: ConnectionManager, weaviate_manager: WeaviateConnectionManager):
