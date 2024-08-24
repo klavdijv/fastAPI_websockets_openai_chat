@@ -119,6 +119,7 @@ class OpenAIChatMemoryHandler(OpenAIChatHandler):
     def process_json(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
         character_name: str = self._escape_name(json_data['character_name'])
         messages: Dict[str, str] = json_data['messages']
+        print(messages)
         collection: WeaviateCollection = self.weaviate_manager.get_collection(f'chat_hist_{character_name}')
         context_messages: List(Dict[str, str]) = collection.get_messages(query=messages[-1]['content'])
         json_data['messages'] = [messages[0]] + context_messages + messages[1:]
@@ -130,11 +131,30 @@ class OpenAIChatMemoryHandler(OpenAIChatHandler):
                 response += result['message']
 
         if response:
-            messages_to_save: List[Dict[str, str]] = messages[1:] + [{'role': 'assistant', 'content': response}]
-            collection.save(messages_to_save)
+            messages = [message for message in messages if self._check_message(message)]
+            if messages:
+                messages_to_save: List[Dict[str, str]] = messages[1:] + [{'role': 'assistant', 'content': response}]
+                collection.save(messages_to_save)
 
     def _escape_name(self, name: str) -> str:
         name = name.strip()
         name = name.replace(',', '')
         name = name.replace(' ', '_')
         return name
+
+    def _check_message(self, message: Dict[str, str]) -> bool:
+        if message['role'] == 'tool':
+            return False
+        if 'tool_calls' in message:
+            return False
+        return True
+
+    def _filter_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        result: List[Dict[str, str]] = []
+        for message in messages:
+            if message['role'] == 'tool':
+                continue
+            if 'tool_calls' in message:
+                continue
+            result.append(message)
+        return result
